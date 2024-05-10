@@ -1,7 +1,10 @@
-from tkinter.filedialog import askopenfile
-import pandas as pd
 import tkinter as tk
-import tkinter.simpledialog as sd
+from tkinter.filedialog import askopenfile
+from tkinter import messagebox, simpledialog
+import pandas as pd
+import os
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class Power_Bi(tk.Tk):
     def __init__(self):
@@ -9,11 +12,11 @@ class Power_Bi(tk.Tk):
         self.geometry('1200x700')
         self.config(bg='#D4D4D4')
         self.title('Power BI by a Rookie')
-        self.datasets = {}  # Diccionario para almacenar los datasets cargados
-        self.selected_dataset = tk.StringVar()  # Variable para almacenar el dataset seleccionado
-        self.selected_dataset.trace('w', self.change_dataset)  # Configurar un rastreo para detectar cambios en el dataset seleccionado
-        self.max_selections = 3  # Máximo número de opciones seleccionadas
-        self.selections_count = 0  # Contador de selecciones
+        self.datasets = {}
+        self.selected_dataset = tk.StringVar()
+        self.selected_dataset.trace('w', self.change_dataset)
+        self.max_selections = 3
+        self.selections_count = 0
 
         self.welcome_text = tk.Label(self, text='Welcome, please insert your dataset to start', font=('Arial',15), bg='#D4D4D4')
         self.welcome_text.place(x=250, y=100)
@@ -21,11 +24,8 @@ class Power_Bi(tk.Tk):
         self.index_button = tk.Button(self, command=self.open_and_load_file, text='Insert Dataframe (csv file)', fg='black')
         self.index_button.place(x=380, y=150)
 
-        self.columns_frame = None
-        self.canvas = None
-        self.scrollbar = None
-        self.columns_options = []
-        self.selected_options = []
+        self.dropdown_menu = None
+        self.add_dataset_button = None
 
     def open_and_load_file(self):
         self.welcome_text.place_forget()
@@ -33,82 +33,108 @@ class Power_Bi(tk.Tk):
 
         file = askopenfile(mode='r', filetypes=[('CSV Files', '*.csv')])
         if file is not None:
-            df = pd.read_csv(file)
-            dataset_name = sd.askstring('New Dataset', 'Write a name for the dataset')
+            file_path = file.name
+            if os.path.isfile(file_path):
+                df = pd.read_csv(file)
+                dataset_name = simpledialog.askstring('New Dataset', 'Write a name for the dataset')
 
-            if dataset_name:
-                self.datasets[dataset_name] = df.columns.tolist()
-                self.selected_dataset.set(dataset_name)
+                if dataset_name:
+                    self.datasets[dataset_name] = df.columns.tolist()
+                    self.selected_dataset.set(dataset_name)
+                    self.create_dropdown_menu()
+                    self.show_columns(df)
+                    if not self.add_dataset_button:
+                        self.add_dataset_button = tk.Button(self, command=self.add_new_dataset, text='Add New Dataset (csv file)', fg='black')
+                        self.add_dataset_button.place(x=380, y=200)
+                else:
+                    messagebox.showerror("Error", "Dataset name cannot be empty.")
 
-                # Crear el marco de los botones antes de actualizar el menú desplegable
-                self.create_button_frame()
-                # Actualizar el menú desplegable con los nuevos datasets
-                self.dropdown_menu = tk.OptionMenu(self, self.selected_dataset, *self.datasets.keys())
-                self.dropdown_menu.place(x=900, y=125)
-                self.show_columns(df)
+    def add_new_dataset(self):
+        dataset_name = simpledialog.askstring('New Dataset', 'Write a name for the dataset')
+        if dataset_name:
+            file = askopenfile(mode='r', filetypes=[('CSV Files', '*.csv')])
+            if file is not None:
+                file_path = file.name
+                if os.path.isfile(file_path):
+                    df = pd.read_csv(file)
+                    self.datasets[dataset_name] = df.columns.tolist()
+                    self.create_dropdown_menu()
+                else:
+                    messagebox.showerror("Error", "Selected file path is not valid.")
+        else:
+            messagebox.showerror("Error", "Dataset name cannot be empty.")
 
-    def create_button_frame(self):
-        # Crear el marco para los botones
-        self.button_frame = tk.Frame(self, bg='white')
-
-        # Crear el botón para añadir un nuevo dataset
-        btn_add_dataset = tk.Button(self.button_frame, text='Insert Dataframe', command=self.open_and_load_file)
-        btn_add_dataset.pack(pady=10)
-
-        # Colocar el marco de botones en la ventana principal
-        self.button_frame.place(x=900, y=80)
+    def create_dropdown_menu(self):
+        if self.dropdown_menu:
+            self.dropdown_menu.destroy()
+        
+        self.dropdown_menu = tk.OptionMenu(self, self.selected_dataset, *self.datasets.keys())
+        self.dropdown_menu.place(x=900, y=125)
 
     def change_dataset(self, *args):
         dataset_name = self.selected_dataset.get()
         if dataset_name in self.datasets:
-            df = pd.DataFrame(columns=self.datasets[dataset_name])  # Crear un DataFrame vacío con las columnas del dataset seleccionado
+            df = pd.DataFrame(columns=self.datasets[dataset_name])
             self.show_columns(df)
 
     def show_columns(self, df):
         frame_width = 200
-        
-        if self.columns_frame:
-            self.columns_frame.destroy()
+        columns_options = []
 
-        self.columns_frame = tk.Frame(self, bg='white', width=frame_width, height=300, bd=2, relief=tk.SUNKEN)
-        self.columns_frame.place(x=900, y=175)
+        columns_frame = tk.Frame(self, bg='white', width=frame_width, height=300, bd=2, relief=tk.SUNKEN)
+        columns_frame.place(x=900, y=175)
 
-        self.canvas = tk.Canvas(self.columns_frame, bg='white', width=frame_width, height=300)
-        self.scrollbar = tk.Scrollbar(self.columns_frame, orient='vertical', command=self.canvas.yview)
-        self.scrollbar.pack(side='right', fill='y')
-        self.canvas.pack(side='left', fill='both', expand=True)
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        canvas = tk.Canvas(columns_frame, bg='white', width=frame_width, height=300)
+        scrollbar = tk.Scrollbar(columns_frame, orient='vertical', command=canvas.yview)
+        scrollbar.pack(side='right', fill='y')
+        canvas.pack(side='left', fill='both', expand=True)
+        canvas.configure(yscrollcommand=scrollbar.set)
 
-        inner_frame = tk.Frame(self.canvas, bg='white')
-        self.canvas.create_window((0, 0), window=inner_frame, anchor='nw')
+        inner_frame = tk.Frame(canvas, bg='white')
+        canvas.create_window((0, 0), window=inner_frame, anchor='nw')
 
-        self.columns_table = tk.Label(inner_frame, text='Dataset Columns', font=('Arial', 12), bg='white')
-        self.columns_table.pack(pady=10)
+        columns_table = tk.Label(inner_frame, text='Dataset Columns', font=('Arial', 12), bg='white')
+        columns_table.pack(pady=10)
         
         for column in df.columns:
             var = tk.StringVar()
             column_option = tk.Checkbutton(inner_frame, text=column, variable=var, onvalue=column, offvalue="")
             column_option.pack(anchor=tk.W, padx=20, pady=5)
-            column_option.bind('<ButtonRelease-1>', lambda event, col=column, v=var: self.limit_selections(event, column, var))
-            self.columns_options.append(column_option)
-            self.selected_options.append(var)
+            columns_options.append(var)
 
         inner_frame.update_idletasks()
-        self.canvas.config(scrollregion=self.canvas.bbox('all'))
+        canvas.config(scrollregion=canvas.bbox('all'))
 
-    def limit_selections(self, event, column, var):
-        if var.get():
-            self.selections_count += 1
-            if self.selections_count >= self.max_selections:
-                for option in self.columns_options:
-                    if option.cget('text') != column:
-                        option.config(state=tk.DISABLED)
+        graphics_button = tk.Button(self, text='Graphic', command=lambda: self.prepare_graph(df, columns_options))
+        graphics_button.place(x=100, y=20)
+
+    def prepare_graph(self, df, columns_options):
+        selected_columns = [var.get() for var in columns_options if var.get()]
+        if selected_columns:
+            for column in selected_columns:
+                df[column] = pd.to_numeric(df[column], errors='coerce')
+
+            self.graphics(df, selected_columns)
         else:
-            self.selections_count -= 1
-            if self.selections_count < self.max_selections:
-                for option in self.columns_options:
-                    option.config(state=tk.NORMAL)
+            messagebox.showerror("Error", "No columns selected for plotting.")
+
+    def graphics(self, df, selected_columns):
+        dataset_name = self.selected_dataset.get()
+        fig = Figure(figsize=(6, 4), dpi=100)
+        ax = fig.add_subplot(111)
+
+        for column in selected_columns:
+            ax.plot(df[column], label=column)
+
+        ax.set_xlabel('Índice de datos')
+        ax.set_ylabel('Valores')
+        ax.set_title('Gráfico para dataset: {}'.format(dataset_name))
+        ax.legend()
+
+        canvas = FigureCanvasTkAgg(fig, master=self)
+        canvas.draw()
+        canvas.get_tk_widget().place(x=100, y=100)
 
 if __name__ == "__main__":
-    Execution = Power_Bi()
-    Execution.mainloop()
+    app = Power_Bi()
+    app.mainloop()
