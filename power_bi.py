@@ -110,7 +110,7 @@ class Power_Bi(tk.Tk):
 
     def prepare_graph(self, df, columns_options):
         selected_columns = [var.get() for var in columns_options if var.get()]
-        if selected_columns:
+        if selected_columns: 
             for column in selected_columns:
                 df[column] = pd.to_numeric(df[column], errors='coerce')
 
